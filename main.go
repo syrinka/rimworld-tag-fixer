@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var NVW_SteamID = "2599504693" // No Version Warning
+var NVW_SteamID = "2599504692" // No Version Warning
 
 func verifyRunnable(workshop string) {
 	info, err := os.Stat(workshop)
