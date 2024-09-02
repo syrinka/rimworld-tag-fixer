@@ -31,6 +31,7 @@ func init() {
 	command.Flags().StringVarP(&FlagVersion, "version", "v", "", "the target version you're trying to fix")
 	command.Flags().StringArrayVarP(&FlagFiles, "file", "f", nil, "external ModIdsToFix files")
 	command.Flags().BoolVarP(&FlagYes, "yes", "y", false, "don't re-confirm")
+	command.Flags().BoolVarP(&FlagQuiet, "quiet", "q", false, "hide skip info")
 }
 
 func main() {
@@ -41,6 +42,7 @@ var (
 	FlagVersion string
 	FlagFiles   []string
 	FlagYes     bool
+	FlagQuiet   bool
 )
 
 var command = &cobra.Command{
@@ -79,18 +81,22 @@ var command = &cobra.Command{
 			var meta ModMetaData
 			err := meta.Init(filepath.Join(workshop, e.Name(), "About", "About.xml"))
 			if err != nil {
-				fmt.Printf("[WARN] fail to operating on %s\n", e.Name())
+				color.LightRed.Printf("[WARN] fail to operating on %s\n", e.Name())
 				continue
 			}
 
-			fmt.Printf("(%s) %s ", e.Name(), meta.Name())
 			if meta.ContainVersionTag(FlagVersion) {
-				color.Gray.Println("[tag existed, skip]")
+				if !FlagQuiet {
+					fmt.Printf("(%s) %s ", e.Name(), meta.Name())
+					color.Gray.Println("[tag existed, skip]")
+				}
 			} else if slices.Contains(ids, meta.Id()) {
+				fmt.Printf("(%s) %s ", e.Name(), meta.Name())
 				color.LightGreen.Println("[no tag, fixable, fix!]")
 				meta.AddVersionTag(FlagVersion)
 				meta.Update()
 			} else {
+				fmt.Printf("(%s) %s ", e.Name(), meta.Name())
 				color.Red.Println("[no tag, not fixable, skip]")
 			}
 		}
