@@ -28,14 +28,20 @@ func verifyRunnable(workshop string) {
 }
 
 func init() {
-	command.Flags().StringP("version", "v", "", "the target version you're trying to fix")
-	command.Flags().StringArrayP("file", "f", []string{}, "external ModIdsToFix files")
-	command.Flags().BoolP("yes", "y", false, "don't re-confirm")
+	command.Flags().StringVarP(&FlagVersion, "version", "v", "", "the target version you're trying to fix")
+	command.Flags().StringArrayVarP(&FlagFiles, "file", "f", nil, "external ModIdsToFix files")
+	command.Flags().BoolVarP(&FlagYes, "yes", "y", false, "don't re-confirm")
 }
 
 func main() {
 	command.Execute()
 }
+
+var (
+	FlagVersion string
+	FlagFiles   []string
+	FlagYes     bool
+)
 
 var command = &cobra.Command{
 	Use:   "tag-fixer",
@@ -45,30 +51,27 @@ var command = &cobra.Command{
 		var workshop = args[0]
 		verifyRunnable(workshop)
 
-		tag, _ := cmd.Flags().GetString("version")
-		if tag == "" {
+		if FlagVersion == "" {
 			color.Red.Println("[FATAL] no version specified?")
 			os.Exit(1)
 		}
 
-		basefile := filepath.Join(workshop, NVW_SteamID, tag, "ModIdsToFix.xml")
-		extfiles, _ := cmd.Flags().GetStringArray("file")
+		basefile := filepath.Join(workshop, NVW_SteamID, FlagVersion, "ModIdsToFix.xml")
 
-		confirm, _ := cmd.Flags().GetBool("yes")
-		if !confirm {
-			fmt.Printf("target version tag: %s\n", tag)
+		if !FlagYes {
+			fmt.Printf("target version tag: %s\n", FlagVersion)
 			fmt.Println("ModIdsToFix files:")
 			fmt.Printf("- %s\n", basefile)
-			for _, e := range extfiles {
-				fmt.Printf("- %s\n", e)
+			for _, file := range FlagFiles {
+				fmt.Printf("- %s\n", file)
 			}
 			fmt.Printf("Enter to continue, or Ctrl+C to abort")
 			os.Stdin.Read(make([]byte, 1))
 		}
 
 		var ids = collectFixable(basefile)
-		for _, e := range extfiles {
-			ids = append(ids, collectFixable(e)...)
+		for _, file := range FlagFiles {
+			ids = append(ids, collectFixable(file)...)
 		}
 
 		entries, _ := os.ReadDir(workshop)
@@ -81,11 +84,11 @@ var command = &cobra.Command{
 			}
 
 			fmt.Printf("(%s) %s ", e.Name(), meta.Name())
-			if meta.ContainVersionTag(tag) {
+			if meta.ContainVersionTag(FlagVersion) {
 				color.Gray.Println("[tag existed, skip]")
 			} else if slices.Contains(ids, meta.Id()) {
 				color.LightGreen.Println("[no tag, fixable, fix!]")
-				meta.AddVersionTag(tag)
+				meta.AddVersionTag(FlagVersion)
 				meta.Update()
 			} else {
 				color.Red.Println("[no tag, not fixable, skip]")
