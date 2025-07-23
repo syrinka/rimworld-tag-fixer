@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 
 	"github.com/gookit/color"
 	"github.com/spf13/cobra"
@@ -41,11 +42,32 @@ func verifyRunnable(workshop string) {
 	}
 }
 
+func isTranslation(modpath string) bool {
+	whitelist := []string{
+		"About",
+		"Languages",
+		"README.md",
+		"LICENSE",
+		".git",
+		".gitignore",
+		".gitattributes",
+		".editorconfig",
+	}
+	entries, _ := os.ReadDir(modpath)
+	for _, e := range entries {
+		if !slices.Contains(whitelist, e.Name()) {
+			return false
+		}
+	}
+	return true
+}
+
 func init() {
-	command.Flags().StringVarP(&FlagVersion, "version", "v", "", "the target version you're trying to fix")
-	command.Flags().StringArrayVarP(&FlagFiles, "file", "f", nil, "external ModIdsToFix files")
+	command.Flags().StringVarP(&FlagVersion, "version", "v", "", "the target version")
+	command.Flags().StringArrayVarP(&FlagFiles, "file", "f", nil, "extra ModIdsToFix files")
 	command.Flags().BoolVarP(&FlagYes, "yes", "y", false, "don't re-confirm")
-	command.Flags().BoolVarP(&FlagQuiet, "quiet", "q", false, "hide skip info")
+	command.Flags().BoolVarP(&FlagTMod, "tmod", "t", false, "auto-detect and try to fix translation mods")
+	command.Flags().BoolVar(&FlagVerbose, "verbose", false, "show all traversed mods")
 }
 
 func main() {
@@ -56,7 +78,8 @@ var (
 	FlagVersion string
 	FlagFiles   []string
 	FlagYes     bool
-	FlagQuiet   bool
+	FlagVerbose bool
+	FlagTMod    bool
 )
 
 var command = &cobra.Command{
@@ -102,30 +125,45 @@ var command = &cobra.Command{
 		for _, file := range FlagFiles {
 			ids = append(ids, collectFixable(file)...)
 		}
+		for idx, id := range ids {
+			ids[idx] = strings.ToLower(id)
+		}
 
+		totalfixed := 0
 		entries, _ := os.ReadDir(workshop)
 		for _, e := range entries {
 			var meta ModMetaData
-			err := meta.Init(filepath.Join(workshop, e.Name(), "About", "About.xml"))
+			modpath := filepath.Join(workshop, e.Name())
+			err := meta.Init(filepath.Join(modpath, "About", "About.xml"))
 			if err != nil {
-				color.LightRed.Printf("[WARN] fail to operating on %s\n", e.Name())
+				color.LightRed.Printf("[WARN] cannot find About.xml in mod %s\n", e.Name())
 				continue
 			}
 
 			if meta.ContainVersionTag(FlagVersion) {
-				if !FlagQuiet {
+				if FlagVerbose {
 					fmt.Printf("(%s) %s ", e.Name(), meta.Name())
 					color.Gray.Println("[tag existed, skip]")
 				}
-			} else if slices.Contains(ids, meta.Id()) {
+			} else if slices.Contains(ids, strings.ToLower(meta.Id())) {
 				fmt.Printf("(%s) %s ", e.Name(), meta.Name())
 				color.LightGreen.Println("[no tag, fixable, fix!]")
 				meta.AddVersionTag(FlagVersion)
 				meta.Update()
-			} else {
+				totalfixed += 1
+			} else if FlagTMod && isTranslation(modpath) {
 				fmt.Printf("(%s) %s ", e.Name(), meta.Name())
-				color.Red.Println("[no tag, not fixable, skip]")
+				color.LightGreen.Println("[tmod, fixable, fix!]")
+				meta.AddVersionTag(FlagVersion)
+				meta.Update()
+				totalfixed += 1
+			} else {
+				if FlagVerbose {
+					fmt.Printf("(%s) %s ", e.Name(), meta.Name())
+					color.Red.Println("[no tag, not fixable, skip]")
+				}
 			}
 		}
+		fmt.Printf("process finished, total fixed %d\n", totalfixed)
 	},
 }
