@@ -5,13 +5,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 
 	"github.com/gookit/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/windows/registry"
 )
 
 var NVW_SteamID = "2599504692" // No Version Warning
+
+func detectWorkshopPath() (string, error) {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\Valve\\Steam", registry.ALL_ACCESS)
+	if err != nil {
+		return "", err
+	}
+	path, _, err := key.GetStringValue("InstallPath")
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(path, "steamapps", "workshop", "content", "294100"), nil
+}
 
 func verifyRunnable(workshop string) {
 	info, err := os.Stat(workshop)
@@ -48,13 +62,26 @@ var (
 var command = &cobra.Command{
 	Use:   "tag-fixer",
 	Short: "fix those missing tags!",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		var workshop = args[0]
+		var workshop string
+		if len(args) == 1 {
+			workshop = args[0]
+		} else if runtime.GOOS == "windows" {
+			var err error
+			workshop, err = detectWorkshopPath()
+			if err != nil {
+				color.Red.Println("[FATAL] fail to detect steam workshop path, please pass it as argument")
+				os.Exit(1)
+			}
+		} else {
+			color.Red.Println("[FATAL] steam workshop path is required as first argument")
+			os.Exit(1)
+		}
 		verifyRunnable(workshop)
 
 		if FlagVersion == "" {
-			color.Red.Println("[FATAL] no version specified?")
+			color.Red.Println("[FATAL] use -v to specify a version to fix")
 			os.Exit(1)
 		}
 
